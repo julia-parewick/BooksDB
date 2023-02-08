@@ -164,42 +164,37 @@ public class BookDatabaseManager {
     }
 
     public static void removeAuthorWorks(Connection connection, int authorID) throws SQLException {
-
         String checkAuthorQuery = "select * from authorisbn where authorID=?";
         PreparedStatement checkAuthorStmt = connection.prepareStatement(checkAuthorQuery);
         checkAuthorStmt.setInt(1, authorID);
         ResultSet dbEntry = checkAuthorStmt.executeQuery();
-        if(dbEntry.last()){
-            String deleteFKQuery = "delete from authorisbn where authorID=?";
-            PreparedStatement deleteFKStmt = connection.prepareStatement(deleteFKQuery);
-            deleteFKStmt.setInt(1, authorID);
-            deleteFKStmt.execute();
 
-            String deleteAuthorQuery = "delete from authors where authorID=?";
-            PreparedStatement deleteAuthorStmt = connection.prepareStatement(deleteAuthorQuery);
-            deleteAuthorStmt.setInt(1, authorID);
-            deleteAuthorStmt.execute();
+        String deleteFKQuery = "delete from authorisbn where authorID=?";
+        PreparedStatement deleteFKStmt = connection.prepareStatement(deleteFKQuery);
+        deleteFKStmt.setInt(1, authorID);
+        deleteFKStmt.execute();
 
-            while(dbEntry.next()){
-                String deleteTitleQuery = "delete from titles where isbn=?";
-                PreparedStatement deleteTitleStmt = connection.prepareStatement(deleteTitleQuery);
+        String deleteAuthorQuery = "delete from authors where authorID=?";
+        PreparedStatement deleteAuthorStmt = connection.prepareStatement(deleteAuthorQuery);
+        deleteAuthorStmt.setInt(1, authorID);
+        deleteAuthorStmt.execute();
 
-                String checkAuthorsQuery = "select authorID from authorisbn where isbn=?";
-                PreparedStatement checkAuthorsStmt = connection.prepareStatement(checkAuthorsQuery);
-                checkAuthorsStmt.setString(1, dbEntry.getString(2));
-                ResultSet authors = checkAuthorsStmt.executeQuery();
-                authors.last();
-                if(authors.getRow()==1){
-                    deleteTitleStmt.setString(1, dbEntry.getString(2));
-                    deleteTitleStmt.execute();
-                }
+        while(dbEntry.next()){
+            String deleteTitleQuery = "delete from titles where isbn=?";
+            PreparedStatement deleteTitleStmt = connection.prepareStatement(deleteTitleQuery);
+
+
+            String checkAuthorsQuery = "select authorID from authorisbn where isbn=?";
+            PreparedStatement checkAuthorsStmt = connection.prepareStatement(checkAuthorsQuery);
+            checkAuthorsStmt.setString(1, dbEntry.getString(2));
+            ResultSet authors = checkAuthorsStmt.executeQuery();
+            authors.last();
+            if(authors.getRow()==1){
+                deleteTitleStmt.setString(1, dbEntry.getString(2));
+                deleteTitleStmt.execute();
             }
-
-            System.out.printf("Author and all associated works have been deleted!");
         }
-        else{
-            System.out.println("Author with this ID does not exist!");
-        }
+        System.out.printf("Author and all associated works have been deleted!");
     }
 
     public static void updateBook(Connection connection, String isbn, String title, int edition, String copyright) throws SQLException {
@@ -214,7 +209,7 @@ public class BookDatabaseManager {
     }
 
     public static void updateAuthor(Connection connection, int id, String fname, String lname) throws SQLException {
-        String sql = "update authors set firstName=?, lastName=? where id=?";
+        String sql = "update authors set firstName=?, lastName=? where authorID=?";
         PreparedStatement statement = connection.prepareStatement(sql);
         statement.setString(1, fname);
         statement.setString(2,lname);
@@ -401,14 +396,18 @@ public class BookDatabaseManager {
 
     public static void viewAuthorInfo(Connection connection, List<Author> authorList) throws SQLException {
         Scanner scanner = new Scanner(System.in);
-        int authorID = 0;
+        int authorID;
+        System.out.print("Enter author ID: ");
         while(true){
             try{
-                System.out.print("Enter author ID: ");
                 authorID = scanner.nextInt();
-                break;
+                if(checkAuthorByID(connection, authorID)){
+                    break;
+                }else{
+                    throw new InputMismatchException();
+                }
             }catch(InputMismatchException ime){
-                System.out.println("Invalid input. Please retry: ");
+                System.out.println("Invalid input. Please retry:\n>>> ");
             }
         }
         int finalAuthorID = authorID;
@@ -430,12 +429,12 @@ public class BookDatabaseManager {
                     }
                 }
         );
-        System.out.println("0 - Back\n1 - Edit\n2 - Delete");
+        System.out.println("0 - Exit\n1 - Back\n2 - Edit\n3 - Delete");
         int chooseAction;
         while(true){
             try{
                 chooseAction = scanner.nextInt();
-                if(chooseAction>2){
+                if(chooseAction>3){
                     throw new InputMismatchException();
                 }
                 break;
@@ -445,6 +444,10 @@ public class BookDatabaseManager {
         }
         switch (chooseAction){
             case 0 -> {
+                exitProgram(connection);
+            }
+            case 1 -> {
+
             }
             case 2 -> {
                 updateAuthorPrompt(connection, finalAuthorID);
@@ -575,8 +578,6 @@ public class BookDatabaseManager {
     public static void printTitles(Connection connection, List<Book> bookList) throws SQLException {
         Scanner scanner = new Scanner(System.in);
 
-        boolean back = false;
-
         while(true){
             System.out.printf("%-15s%15s%60s%15s\n", "ISBN", "Title", "Edition", "Copyright");
             bookList.forEach(
@@ -591,7 +592,7 @@ public class BookDatabaseManager {
             while (true) {
                 try {
                     chooseAction = scanner.nextInt();
-                    if (chooseAction > 3) {
+                    if (chooseAction > 4) {
                         throw new InputMismatchException();
                     }
                     break;
@@ -605,7 +606,6 @@ public class BookDatabaseManager {
                     exitProgram(connection);
                 }
                 case 1 -> {
-                    back = true;
                 }
                 case 2 -> {
                     viewBookInfo(connection, bookList);
@@ -634,24 +634,19 @@ public class BookDatabaseManager {
                         case 2 -> {
                             addBookPrompt(connection);
                             connection.close();
-                            back = true;
                         }
                         case 3 -> {
                             deleteBookPrompt(connection);
                             connection.close();
-                            back = true;
                         }
                     }
                 }
                 case 4 -> {
                     updateBookPrompt(connection, "");
                     connection.close();
-                    back = true;
                 }
             }
-            if(back){
-                break;
-            }
+            break;
         }
     }
 
@@ -665,11 +660,11 @@ public class BookDatabaseManager {
                 }
         );
         int chooseAction = 4;
-        System.out.print("0 - Exit\n1 - Select\n2 - Add/Remove\n3 - Edit\n>>>");
+        System.out.print("0 - Exit\n1 - Back\n2 - Select\n3 - Add/Remove\n4 - Edit\n>>>");
         while (true) {
             try {
                 chooseAction = scanner.nextInt();
-                if(chooseAction>3){
+                if(chooseAction>4){
                     throw new InputMismatchException();
                 }
                 break;
@@ -682,15 +677,18 @@ public class BookDatabaseManager {
                 exitProgram(connection);
             }
             case 1 -> {
-                viewAuthorInfo(connection, authorList);
+
             }
             case 2 -> {
-                System.out.println("Would you like to add or remove an author?\n0 - Exit\n1 - Add\n2 - Remove\n>>>");
+                viewAuthorInfo(connection, authorList);
+            }
+            case 3 -> {
+                System.out.println("Would you like to add or remove an author?\n0 - Exit\n1 - Back\n2 - Add\n3 - Remove\n>>>");
                 int chooseAction2;
                 while(true){
                     try{
                         chooseAction2 = scanner.nextInt();
-                        if(chooseAction2>2){
+                        if(chooseAction2>3){
                             throw new InputMismatchException();
                         }
                         break;
@@ -703,16 +701,19 @@ public class BookDatabaseManager {
                         exitProgram(connection);
                     }
                     case 1 -> {
+
+                    }
+                    case 2 -> {
                         addAuthorPrompt(connection);
                         connection.close();
                     }
-                    case 2 -> {
+                    case 3 -> {
                         deleteAuthorPrompt(connection);
                         connection.close();
                     }
                 }
             }
-            case 3 -> {
+            case 4 -> {
                 updateAuthorPrompt(connection, 0);
                 connection.close();
             }
