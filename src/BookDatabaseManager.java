@@ -87,6 +87,17 @@ public class BookDatabaseManager {
         return false;
     }
 
+    public static boolean checkAuthorByID(Connection connection, int id) throws SQLException {
+        String sql = "select * from authors where authorID=?";
+        PreparedStatement statement = connection.prepareStatement(sql);
+        statement.setInt(1,id);
+        ResultSet authorCheck = statement.executeQuery();
+        if(authorCheck.last()){
+            return true;
+        }
+        return false;
+    }
+
     public static void registerBook(Connection connection, String isbn, String title, int edition, String copyright) throws SQLException {
         if(!checkBook(connection, isbn)){
             String titlesInsert = "insert into titles values(?,?,?,?)";
@@ -201,6 +212,16 @@ public class BookDatabaseManager {
         statement.executeUpdate();
         System.out.printf("Entry %s has been updated!", isbn);
     }
+
+    public static void updateAuthor(Connection connection, int id, String fname, String lname) throws SQLException {
+        String sql = "update authors set firstName=?, lastName=? where id=?";
+        PreparedStatement statement = connection.prepareStatement(sql);
+        statement.setString(1, fname);
+        statement.setString(2,lname);
+        statement.setInt(3,id);
+        statement.executeUpdate();
+        System.out.printf("Author %s %s has been updated!", fname, lname);
+    }
     public static void updateBookPrompt(Connection connection, String isbn) throws SQLException {
         Scanner scanner = new Scanner(System.in);
 
@@ -254,11 +275,47 @@ public class BookDatabaseManager {
         updateBook(connection,isbn,new_title,new_ed,new_copyright);
     }
 
-    public static void updateAuthorPrompt(Connection connection, int id){
+    public static void updateAuthorPrompt(Connection connection, int id) throws SQLException {
         Scanner scanner = new Scanner(System.in);
         if(id==0){
-
+            System.out.println("ID: ");
+            while(true){
+                try{
+                    id = scanner.nextInt();
+                    if(checkAuthorByID(connection, id)){
+                        break;
+                    }else{
+                        throw new InputMismatchException();
+                    }
+                }catch(InputMismatchException ime){
+                    System.out.println("Invalid input. Please retry: ");
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
+        System.out.println("Please enter required fields or enter 0 to exit...\nFirst Name: ");
+        String new_fname;
+        String new_lname;
+        while(true){
+            try{
+                new_fname = scanner.nextLine();
+                break;
+            }catch(InputMismatchException ime){
+                System.out.println("Invalid input. Please retry: ");
+            }
+        }
+
+        System.out.println("Last Name: ");
+        while(true){
+            try{
+                new_lname = scanner.nextLine();
+                break;
+            }catch(InputMismatchException ime){
+                System.out.println("Invalid input. Please retry: ");
+            }
+        }
+        updateAuthor(connection, id, new_fname, new_lname);
     }
 
     public static void viewBookInfo(Connection connection, List<Book> bookList) throws SQLException {
@@ -298,12 +355,12 @@ public class BookDatabaseManager {
                             }
                         }
 
-                        System.out.println("0 - Back\n1 - Edit\n2 - Delete");
+                        System.out.println("0 - Exit\n1 - Back\n2 - Edit\n3 - Delete");
                         int choose;
                         while(true){
                             try {
                                 choose = scanner.nextInt();
-                                if(choose>2){
+                                if(choose>3){
                                     throw new InputMismatchException();
                                 }
                                 break;
@@ -313,16 +370,23 @@ public class BookDatabaseManager {
                         }
                         switch(choose){
                             case 0 -> {
-
+                                try {
+                                    exitProgram(connection);
+                                } catch (SQLException e) {
+                                    throw new RuntimeException(e);
+                                }
                             }
                             case 1 -> {
+
+                            }
+                            case 2 -> {
                                 try {
                                     updateBookPrompt(connection, finalIsbn);
                                 } catch (SQLException e) {
                                     throw new RuntimeException(e);
                                 }
                             }
-                            case 2 -> {
+                            case 3 -> {
                                 try {
                                     removeBook(connection, finalIsbn);
                                 } catch (SQLException e) {
@@ -466,11 +530,11 @@ public class BookDatabaseManager {
         System.out.println("Enter ISBN of book to delete: ");
         while(true) {
             String isbn = scanner.next();
-
             if(checkBook(connection, isbn)){
                 removeBook(connection, isbn);
+                break;
             }else {
-                System.out.println("Title not found.");
+                System.out.println("Title not found. Please try again:");
             }
         }
     }
@@ -495,74 +559,99 @@ public class BookDatabaseManager {
         int id;
         while(true){
             try{
-               id = scanner.nextInt();
-               break;
-            }catch (InputMismatchException ime) {
-                System.out.print("Invalid input. Please retry: ");
+                id = scanner.nextInt();
+                if(checkAuthorByID(connection,id)){
+                    removeAuthorWorks(connection, id);
+                    break;
+                }else{
+                    throw new InputMismatchException();
+                }
+            }catch(InputMismatchException ime){
+                System.out.println("Author not found. Please try again:");
             }
         }
-        removeAuthorWorks(connection, id);
-        connection.close();
     }
 
     public static void printTitles(Connection connection, List<Book> bookList) throws SQLException {
         Scanner scanner = new Scanner(System.in);
-        System.out.printf("%-15s%15s%60s%15s\n", "ISBN", "Title", "Edition", "Copyright");
-        bookList.forEach(
-                book -> {
-                    System.out.format("%-15s%-60s%15s%15s", book.getIsbn(), book.getTitle(), book.getEdition(), book.getCopyright());
-                    System.out.println();
+
+        boolean back = false;
+
+        while(true){
+            System.out.printf("%-15s%15s%60s%15s\n", "ISBN", "Title", "Edition", "Copyright");
+            bookList.forEach(
+                    book -> {
+                        System.out.format("%-15s%-60s%15s%15s", book.getIsbn(), book.getTitle(), book.getEdition(), book.getCopyright());
+                        System.out.println();
+                    }
+            );
+            int chooseAction;
+
+            System.out.print("0 - Exit\n1 - Back\n2 - Select\n3 - Add/Remove\n4 - Edit\n>>>");
+            while (true) {
+                try {
+                    chooseAction = scanner.nextInt();
+                    if (chooseAction > 3) {
+                        throw new InputMismatchException();
+                    }
+                    break;
+                } catch (InputMismatchException ime) {
+                    System.out.println("Invalid input. Please retry: ");
                 }
-        );
-        int chooseAction = 4;
-        System.out.println("0 - Exit\n1 - Select\n2 - Add/Remove\n3 - Edit");
-        while (true) {
-            try {
-                chooseAction = scanner.nextInt();
-            } catch (InputMismatchException ime) {
-                System.out.println("Invalid input. Please retry: ");
+
             }
             switch (chooseAction) {
                 case 0 -> {
                     exitProgram(connection);
                 }
                 case 1 -> {
-                    viewBookInfo(connection, bookList);
+                    back = true;
                 }
                 case 2 -> {
-                    System.out.println("Would you like to add or remove a book?\n0 - Exit\n1 - Add\n2 - Remove");
-                    int chooseAction2 = 3;
-                    while(true){
-                        try{
-                            chooseAction2 = scanner.nextInt();
-                            if(chooseAction2>2){
-                                throw new InputMismatchException();
-                            }
-                        }catch(InputMismatchException ime){
-                            System.out.println("Invalid input. Please retry: ");
-                        }
-                        switch(chooseAction2){
-                            case 0 -> {
-                                exitProgram(connection);
-                            }
-                            case 1 -> {
-                                addBookPrompt(connection);
-                                connection.close();
-                            }
-                            case 2 -> {
-                                deleteBookPrompt(connection);
-                                connection.close();
-                            }
-                        }
-                        break;
-                    }
+                    viewBookInfo(connection, bookList);
                 }
                 case 3 -> {
+                    System.out.print("Would you like to add or remove a book?\n0 - Exit\n1 - Back\n2 - Add\n3 - Remove\n>>>");
+                    int chooseAction2;
+                    while (true) {
+                        try {
+                            chooseAction2 = scanner.nextInt();
+                            if (chooseAction2 > 3) {
+                                throw new InputMismatchException();
+                            }
+                            break;
+                        } catch (InputMismatchException ime) {
+                            System.out.println("Invalid input. Please retry: ");
+                        }
+                    }
+                    switch (chooseAction2) {
+                        case 0 -> {
+                            exitProgram(connection);
+                        }
+                        case 1 -> {
+
+                        }
+                        case 2 -> {
+                            addBookPrompt(connection);
+                            connection.close();
+                            back = true;
+                        }
+                        case 3 -> {
+                            deleteBookPrompt(connection);
+                            connection.close();
+                            back = true;
+                        }
+                    }
+                }
+                case 4 -> {
                     updateBookPrompt(connection, "");
                     connection.close();
+                    back = true;
                 }
             }
-            break;
+            if(back){
+                break;
+            }
         }
     }
 
@@ -576,50 +665,57 @@ public class BookDatabaseManager {
                 }
         );
         int chooseAction = 4;
-        System.out.println("0 - Exit\n1 - Select\n2 - Add/Remove\n3 - Edit");
+        System.out.print("0 - Exit\n1 - Select\n2 - Add/Remove\n3 - Edit\n>>>");
         while (true) {
             try {
                 chooseAction = scanner.nextInt();
+                if(chooseAction>3){
+                    throw new InputMismatchException();
+                }
+                break;
             } catch (InputMismatchException ime) {
                 System.out.println("Invalid input. Please retry: ");
             }
-            switch (chooseAction) {
-                case 0 -> {
-                    exitProgram(connection);
-                }
-                case 1 -> {
-                    viewAuthorInfo(connection, authorList);
-                }
-                case 2 -> {
-                    System.out.println("Would you like to add or remove an author?\n0 - Exit\n1 - Add\n2 - Remove");
-                    int chooseAction2 = 3;
-                    while(true){
-                        try{
-                            chooseAction2 = scanner.nextInt();
-                            if(chooseAction2>2){
-                                throw new InputMismatchException();
-                            }
-                        }catch(InputMismatchException ime){
-                            System.out.println("Invalid input. Please retry: ");
-                        }
-                        switch(chooseAction2){
-                            case 0 -> {
-                                exitProgram(connection);
-                            }
-                            case 1 -> {
-                                addAuthorPrompt(connection);
-                                connection.close();
-                            }
-                            case 2 -> {
-                                deleteAuthorPrompt(connection);
-                                connection.close();
-                            }
+        }
+        switch (chooseAction) {
+            case 0 -> {
+                exitProgram(connection);
+            }
+            case 1 -> {
+                viewAuthorInfo(connection, authorList);
+            }
+            case 2 -> {
+                System.out.println("Would you like to add or remove an author?\n0 - Exit\n1 - Add\n2 - Remove\n>>>");
+                int chooseAction2;
+                while(true){
+                    try{
+                        chooseAction2 = scanner.nextInt();
+                        if(chooseAction2>2){
+                            throw new InputMismatchException();
                         }
                         break;
+                    }catch(InputMismatchException ime){
+                        System.out.println("Invalid input. Please retry: ");
+                    }
+                }
+                switch(chooseAction2){
+                    case 0 -> {
+                        exitProgram(connection);
+                    }
+                    case 1 -> {
+                        addAuthorPrompt(connection);
+                        connection.close();
+                    }
+                    case 2 -> {
+                        deleteAuthorPrompt(connection);
+                        connection.close();
                     }
                 }
             }
-            break;
+            case 3 -> {
+                updateAuthorPrompt(connection, 0);
+                connection.close();
+            }
         }
     }
 
@@ -665,7 +761,7 @@ public class BookDatabaseManager {
                     }
             );
 
-            System.out.println("\n0 - Exit\n1 - View books database\n2 - View authors database");
+            System.out.print("\n0 - Exit\n1 - View books database\n2 - View authors database\n>>>");
             Integer chooseTable = 4;
             while(true){
                 Scanner scanner = new Scanner(System.in);
@@ -675,23 +771,22 @@ public class BookDatabaseManager {
                     if(chooseTable>2){
                         throw new InputMismatchException();
                     }
+                    break;
                 }
                 catch(InputMismatchException ime){
                     System.out.println("Invalid input. Please retry: ");
                 }
-
-                switch (chooseTable) {
-                    case 0 -> {
-                        exitProgram(connection);
-                    }
-                    case 1 -> {
-                        printTitles(connection, bookList);
-                    }
-                    case 2 -> {
-                        printAuthors(connection, authorList);
-                    }
+            }
+            switch (chooseTable) {
+                case 0 -> {
+                    exitProgram(connection);
                 }
-                break;
+                case 1 -> {
+                    printTitles(connection, bookList);
+                }
+                case 2 -> {
+                    printAuthors(connection, authorList);
+                }
             }
         }
     }
